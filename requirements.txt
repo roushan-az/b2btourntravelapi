@@ -1,0 +1,48 @@
+# WanderKashmir Backend — Python Dependencies
+# Install with: pip install -r requirements.txt
+
+# ── Core Framework ─────────────────────────────────────────────────────────────
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+python-multipart==0.0.12          # File upload support
+
+# ── Database ───────────────────────────────────────────────────────────────────
+sqlalchemy[asyncio]==2.0.36
+asyncpg==0.30.0                   # Async PostgreSQL driver
+psycopg2-binary==2.9.10           # Sync driver for Alembic
+alembic==1.14.0                   # Database migrations
+
+# ── Configuration ──────────────────────────────────────────────────────────────
+pydantic==2.10.3
+pydantic-settings==2.6.1
+pydantic[email]==2.10.3
+python-dotenv==1.0.1
+
+# ── Authentication ─────────────────────────────────────────────────────────────
+python-jose[cryptography]==3.3.0  # JWT tokens
+passlib[bcrypt]==1.7.4            # Password hashing
+
+# ── Azure Storage ──────────────────────────────────────────────────────────────
+azure-storage-blob==12.23.1
+azure-core==1.32.0
+
+# ── PDF Generation ─────────────────────────────────────────────────────────────
+weasyprint==63.0                  # Primary PDF engine (HTML→PDF)
+reportlab==4.2.5                  # Fallback PDF engine
+
+# ── Email ──────────────────────────────────────────────────────────────────────
+# smtplib is built-in; no extra package needed
+
+# ── Logging ───────────────────────────────────────────────────────────────────
+python-json-logger==2.0.7
+
+# ── Utilities ──────────────────────────────────────────────────────────────────
+httpx==0.28.0                     # Async HTTP client (for webhooks, WhatsApp API)
+pillow==10.4.0                 # Image processing
+python-slugify==8.0.4             # Slug generation
+
+# ── Dev / Testing ──────────────────────────────────────────────────────────────
+pytest==8.3.4
+pytest-asyncio==0.24.0
+httpx==0.28.0                     # Test client
+faker==33.1.0                     # Seed data generation
