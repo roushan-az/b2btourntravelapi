@@ -17,8 +17,8 @@ from fastapi.responses import JSONResponse
 
 from app.config import settings
 from app.database import check_db_connection, create_all_tables
-from app.routers import (
-    activities, agents, auth, destinations,
+from app.core import (
+    activities, auth, destinations,
     hotels, itineraries, pricing, quotations, vehicles,
     templates, admin_stats,
 )
@@ -133,7 +133,7 @@ def create_app() -> FastAPI:
         response = await call_next(request)
         duration_ms = round((time.perf_counter() - start) * 1000, 2)
         logger.info(
-            f"{request.method} {request.url.path} → {response.status_code} [{duration_ms}ms]",
+            f"{request.method} {request.url.path} -> {response.status_code} [{duration_ms}ms]",
             extra={
                 "method": request.method,
                 "path": request.url.path,
@@ -198,7 +198,6 @@ def create_app() -> FastAPI:
     app.include_router(hotels.router, prefix=API_PREFIX)
     app.include_router(vehicles.router, prefix=API_PREFIX)
     app.include_router(activities.router, prefix=API_PREFIX)
-    app.include_router(agents.router, prefix=API_PREFIX)
     app.include_router(quotations.router, prefix=API_PREFIX)
     app.include_router(pricing.router, prefix=API_PREFIX)
     app.include_router(templates.router, prefix=API_PREFIX)

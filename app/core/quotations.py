@@ -25,9 +25,10 @@ from app.schemas import (
     MessageResponse, PackagePriceRequest, PackagePriceResponse,
     QuotationCreate, QuotationResponse, QuotationUpdate,
 )
+from app.services import email_service
 from app.services.auth_service import get_current_agent, get_current_admin, get_current_user
 from app.services.blob_service import blob_service
-from app.services.email_service import email_service
+
 from app.services.pdf_service import pdf_service
 from app.services.pricing_service import pricing_engine
 

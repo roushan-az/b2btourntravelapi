@@ -1,0 +1,296 @@
+from pydantic import BaseModel, EmailStr
+from typing import Optional, List, TypeVar, Generic
+from uuid import UUID
+
+T = TypeVar("T")
+
+# --- Pagination ---
+class PaginatedResponse(BaseModel, Generic[T]):
+    items: List[T]
+    total: int
+    page: int
+    size: int
+
+# --- Authentication & User ---
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str
+
+class TokenRefreshRequest(BaseModel):
+    refresh_token: str
+
+class TokenResponse(BaseModel):
+    access_token: str
+    refresh_token: str
+    expires_in: int
+
+class UserResponse(BaseModel):
+    id: UUID
+    email: str
+    full_name: str
+    role: str
+
+class PasswordChangeRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+class OTPRequest(BaseModel):
+    email: EmailStr
+
+class ResetPasswordRequest(BaseModel):
+    email: EmailStr
+    otp: str
+    new_password: str
+
+# --- General ---
+class MessageResponse(BaseModel):
+    message: str
+
+# Ensure this is in app/schemas.py
+class HealthResponse(BaseModel):
+    status: str
+    version: str
+    environment: str
+    database: bool
+    azure_storage: bool
+
+# --- Activity Schemas ---
+class ActivityBase(BaseModel):
+    name: str
+    category: str
+    base_price: float
+    child_price: Optional[float] = None
+    duration_label: str
+    image_url: Optional[str] = None
+    sort_order: int = 0
+    is_active: bool = True
+
+class ActivityCreate(ActivityBase):
+    destination_id: Optional[UUID] = None
+
+class ActivityUpdate(BaseModel):
+    name: Optional[str] = None
+    category: Optional[str] = None
+    base_price: Optional[float] = None
+    child_price: Optional[float] = None
+    duration_label: Optional[str] = None
+    image_url: Optional[str] = None
+    is_active: Optional[bool] = None
+
+class ActivityResponse(ActivityBase):
+    id: UUID
+    destination_id: Optional[UUID] = None
+
+# --- Destination Schemas ---
+class DestinationBase(BaseModel):
+    name: str
+    slug: str
+    region: str
+    image_url: Optional[str] = None
+    highlights: Optional[List[str]] = []
+    sort_order: int = 0
+    is_active: bool = True
+
+class DestinationCreate(DestinationBase):
+    pass
+
+class DestinationUpdate(BaseModel):
+    name: Optional[str] = None
+    region: Optional[str] = None
+    is_active: Optional[bool] = None
+
+class DestinationResponse(DestinationBase):
+    id: UUID
+
+# --- Hotel Schemas ---
+class HotelBase(BaseModel):
+    name: str
+    destination_id: UUID
+    category: str
+    stars: int
+    description: Optional[str] = None
+    amenities: Optional[List[str]] = []
+
+class HotelCreate(HotelBase):
+    pass
+
+class HotelUpdate(BaseModel):
+    name: Optional[str] = None
+    category: Optional[str] = None
+    stars: Optional[int] = None
+    description: Optional[str] = None
+    is_active: Optional[bool] = None
+
+class HotelResponse(HotelBase):
+    id: UUID
+    rating: Optional[float] = None
+
+# --- RoomType & MealPlan Schemas ---
+
+class MealPlanRateSchema(BaseModel):
+    meal_plan: str # Using str to match Enum or string value
+    rate_per_night: float
+
+class RoomTypeCreate(BaseModel):
+    hotel_id: UUID
+    name: str
+    max_occupancy: int
+    extra_bed_rate: float
+    meal_plan_rates: Optional[List[MealPlanRateSchema]] = []
+
+class RoomTypeResponse(BaseModel):
+    id: UUID
+    hotel_id: UUID
+    name: str
+    max_occupancy: int
+    extra_bed_rate: float
+    meal_plan_rates: List[MealPlanRateSchema]
+
+# --- Itinerary Block Schemas ---
+
+class ItineraryBlockBase(BaseModel):
+    title: str
+    description: Optional[str] = None
+    day_number: int
+    departs_from: Optional[str] = None
+    overnight_slug: Optional[str] = None
+    highlights: Optional[List[str]] = []
+    duration_label: Optional[str] = None
+    icon: Optional[str] = None
+    image_url: Optional[str] = None
+    tags: Optional[List[str]] = []
+    sort_order: int = 0
+    is_active: bool = True
+
+class ItineraryBlockCreate(ItineraryBlockBase):
+    overnight_destination_id: Optional[UUID] = None
+
+class ItineraryBlockUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    day_number: Optional[int] = None
+    is_active: Optional[bool] = None
+
+class ItineraryBlockResponse(ItineraryBlockBase):
+    id: UUID
+    overnight_destination_id: Optional[UUID] = None
+
+# --- Seasonal Pricing Schema ---
+
+class SeasonalPricingRuleSchema(BaseModel):
+    season: str
+    label: str
+    multiplier: float
+    date_from: Optional[str] = None
+    date_to: Optional[str] = None
+    is_active: bool = True
+
+# --- Quotation/Package Pricing Schemas ---
+
+class PackagePriceRequest(BaseModel):
+    destination_id: UUID
+    hotel_id: UUID
+    number_of_adults: int
+    number_of_children: int
+    check_in_date: str  # Or use datetime.date
+    meal_plan: str
+    activities: Optional[List[UUID]] = []
+
+# --- Quotation/Package Pricing Schemas ---
+
+class PackagePriceResponse(BaseModel):
+    base_price: float
+    taxes: float
+    discount: float
+    total_price: float
+    currency: str = "INR"
+    breakdown: Optional[dict] = None
+
+# --- Quotation Schemas ---
+
+class QuotationItemSchema(BaseModel):
+    description: str
+    detail: str
+    quantity: int
+    unit_price: float
+    total_price: float
+
+class QuotationActivitySchema(BaseModel):
+    name: str
+    quantity: int
+    unit_price: float
+    total_price: float
+
+class QuotationCreate(BaseModel):
+    client_name: str
+    client_email: EmailStr
+    client_phone: str
+    package_label: str
+    total_cost: float
+    items: List[QuotationItemSchema]
+    activities: List[QuotationActivitySchema]
+
+# --- Quotation Response Schema ---
+
+class QuotationResponse(BaseModel):
+    id: UUID
+    quote_number: str
+    client_name: str
+    client_email: EmailStr
+    client_phone: str
+    package_label: str
+    total_cost: float
+    status: str  # Reflects QuotationStatus
+    items: List[QuotationItemSchema]
+    activities: List[QuotationActivitySchema]
+    created_at: str # ISO format timestamp
+
+# --- Quotation Update Schema ---
+
+class QuotationUpdate(BaseModel):
+    client_name: Optional[str] = None
+    client_email: Optional[EmailStr] = None
+    client_phone: Optional[str] = None
+    package_label: Optional[str] = None
+    total_cost: Optional[float] = None
+    status: Optional[str] = None
+
+# --- Vehicle Schemas ---
+
+class VehicleBase(BaseModel):
+    vehicle_type: str
+    models: str
+    capacity_pax: int
+    luggage_capacity: str
+    icon_emoji: Optional[str] = None
+    per_day_rate: float
+    per_km_rate: float
+    airport_transfer_rate: float
+    suitable_for: Optional[List[str]] = []
+    image_url: Optional[str] = None
+    sort_order: int = 0
+    is_active: bool = True
+
+class VehicleCreate(VehicleBase):
+    pass
+
+class VehicleResponse(VehicleBase):
+    id: UUID
+
+# --- Vehicle Update Schema ---
+
+class VehicleUpdate(BaseModel):
+    vehicle_type: Optional[str] = None
+    models: Optional[str] = None
+    capacity_pax: Optional[int] = None
+    luggage_capacity: Optional[str] = None
+    per_day_rate: Optional[float] = None
+    per_km_rate: Optional[float] = None
+    airport_transfer_rate: Optional[float] = None
+    is_active: Optional[bool] = None
+
+# --- Vehicle Seasonal Rate Schema ---
+
+class VehicleSeasonalRateSchema(BaseModel):
+    season: str
+    surcharge_per_day: float
