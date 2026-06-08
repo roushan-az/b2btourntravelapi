@@ -294,3 +294,11 @@ class VehicleUpdate(BaseModel):
 class VehicleSeasonalRateSchema(BaseModel):
     season: str
     surcharge_per_day: float
+
+# --- Authentication & User ---
+class RegisterRequest(BaseModel):
+    full_name: str
+    email: EmailStr
+    password: str
+    agency_name: str
+    role: Optional[str] = "agent"

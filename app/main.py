@@ -3,7 +3,6 @@ WanderKashmir API — Main Application Entry Point
 FastAPI app with CORS, logging, health check, and all routers.
 """
 
-import logging
 import logging.config
 import os
 import sys
@@ -18,9 +17,7 @@ from fastapi.responses import JSONResponse
 from app.config import settings
 from app.database import check_db_connection, create_all_tables
 from app.core import (
-    activities, auth, destinations,
-    hotels, itineraries, pricing, quotations, vehicles,
-    templates, admin_stats,
+    activities, auth, admin_stats, hotels, pricing, itineraries, destinations, templates, vehicles, quotations,
 )
 from app.schemas import HealthResponse
 from app.services.blob_service import blob_service

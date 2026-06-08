@@ -1,6 +1,12 @@
-"""Auth Router — Login, refresh tokens, profile."""
+"""
+Auth Router — JWT Login, Refresh, Password Change, OTP Reset, and Registration.
+"""
+
+from datetime import timedelta
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -9,47 +15,43 @@ from app.models import User
 from app.schemas import (
     LoginRequest, MessageResponse, PasswordChangeRequest,
     TokenRefreshRequest, TokenResponse, UserResponse,
+    OTPRequest, ResetPasswordRequest, RegisterRequest
 )
 from app.services.auth_service import (
     authenticate_user, create_access_token, create_refresh_token,
     decode_token, get_current_user, hash_password, verify_password,
+    register_new_agent, send_otp_to_email, verify_otp_and_reset
 )
 
+# 1. DEFINE ROUTER FIRST
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
+# 2. REGISTRATION
+@router.post("/register", response_model=MessageResponse, status_code=status.HTTP_201_CREATED)
+async def register(payload: RegisterRequest, db: AsyncSession = Depends(get_db)):
+    """Registers a new agent. Account remains inactive until admin approval."""
+    await register_new_agent(payload, db)
+    return MessageResponse(message="Registration successful! Please wait for admin approval.")
 
+# 3. LOGIN
+# 3. LOGIN
 @router.post("/login", response_model=TokenResponse)
 async def login(payload: LoginRequest, db: AsyncSession = Depends(get_db)):
     user = await authenticate_user(payload.email, payload.password, db)
+
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
-            headers={"WWW-Authenticate": "Bearer"},
         )
-    access_token = create_access_token(user.id, user.role)
-    refresh_token = create_refresh_token(user.id)
-    return TokenResponse(
-        access_token=access_token,
-        refresh_token=refresh_token,
-        expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-    )
 
-
-@router.post("/refresh", response_model=TokenResponse)
-async def refresh(payload: TokenRefreshRequest, db: AsyncSession = Depends(get_db)):
-    from sqlalchemy import select
-    from uuid import UUID
-
-    token_data = decode_token(payload.refresh_token)
-    if token_data.get("type") != "refresh":
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
-
-    from app.models import User as UserModel
-    result = await db.execute(select(UserModel).where(UserModel.id == UUID(token_data["sub"])))
-    user = result.scalar_one_or_none()
-    if not user or not user.is_active:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive")
+    # --- THE FIX: Block inactive accounts ---
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account pending admin approval.",
+        )
+    # --------------------------------------
 
     return TokenResponse(
         access_token=create_access_token(user.id, user.role),
@@ -57,20 +59,73 @@ async def refresh(payload: TokenRefreshRequest, db: AsyncSession = Depends(get_d
         expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
     )
 
+# 4. REFRESH TOKEN
+@router.post("/refresh", response_model=TokenResponse)
+async def refresh(payload: TokenRefreshRequest, db: AsyncSession = Depends(get_db)):
+    token_data = decode_token(payload.refresh_token)
+    if token_data.get("type") != "refresh":
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
-@router.get("/me", response_model=UserResponse)
-async def get_me(current_user: User = Depends(get_current_user)):
-    return current_user
+    result = await db.execute(select(User).where(User.id == token_data["sub"]))
+    user = result.scalar_one_or_none()
+    if not user or not user.is_active:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User inactive")
 
+    return TokenResponse(
+        access_token=create_access_token(user.id, user.role),
+        refresh_token=create_refresh_token(user.id),
+        expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+    )
 
+# 5. PASSWORD RESET (OTP FLOW)
+@router.post("/request-password-reset", response_model=MessageResponse)
+async def request_password_reset(payload: OTPRequest, db: AsyncSession = Depends(get_db)):
+    """Generates an OTP and sends it via email."""
+    result = await db.execute(select(User).where(User.email == payload.email))
+    user = result.scalar_one_or_none()
+    if not user:
+        # We don't reveal if email exists for security
+        return MessageResponse(message="If an account exists, an OTP has been sent.")
+
+    # LOGIC: Generate 6-digit code, save to User model or OTP table
+    # email_service.send_otp(user.email, "123456")
+    return MessageResponse(message="OTP sent to your email")
+
+@router.post("/reset-password", response_model=MessageResponse)
+async def reset_password(payload: ResetPasswordRequest, db: AsyncSession = Depends(get_db)):
+    """Verifies OTP and updates password."""
+    # LOGIC: Verify OTP from DB
+    # user.hashed_password = hash_password(payload.new_password)
+    # db.commit()
+    return MessageResponse(message="Password reset successfully")
+
+# 6. CHANGE PASSWORD
 @router.post("/change-password", response_model=MessageResponse)
 async def change_password(
-    payload: PasswordChangeRequest,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+        payload: PasswordChangeRequest,
+        current_user: User = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db),
 ):
     if not verify_password(payload.current_password, current_user.hashed_password):
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current password incorrect")
+        raise HTTPException(status_code=400, detail="Current password incorrect")
+
     current_user.hashed_password = hash_password(payload.new_password)
-    db.add(current_user)
+    await db.commit()
     return MessageResponse(message="Password updated successfully")
+
+# Add these to app/core/auth.py
+
+@router.post("/request-password-reset", response_model=MessageResponse)
+async def request_password_reset(payload: OTPRequest, db: AsyncSession = Depends(get_db)):
+    await send_otp_to_email(payload.email, db)
+    return MessageResponse(message="If an account exists, an OTP has been sent.")
+
+@router.post("/reset-password", response_model=MessageResponse)
+async def reset_password(payload: ResetPasswordRequest, db: AsyncSession = Depends(get_db)):
+    success = await verify_otp_and_reset(payload.email, payload.otp, payload.new_password, db)
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired OTP"
+        )
+    return MessageResponse(message="Password reset successfully")

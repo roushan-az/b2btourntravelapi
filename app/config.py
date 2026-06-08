@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     AZURE_CONTAINER_HOTELS: str = "hotels"
     AZURE_CONTAINER_ITINERARIES: str = "itineraries"
     AZURE_CONTAINER_VEHICLES: str = "vehicles"
+    AZURE_CONTAINER_QUOTATIONS: str = "quotations"
 
     # Pricing defaults
     DEFAULT_GST_RATE: float = 0.05

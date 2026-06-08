@@ -182,7 +182,7 @@ class Quotation(Base):
     status = Column(Enum(QuotationStatus), default=QuotationStatus.DRAFT)
     created_at = Column(DateTime, default=func.now())
     items = relationship("QuotationItem", back_populates="quotation")
-    activities = relationship("QuotationActivity", back_populates="quotation")
+    activities = relationship("QuotationActivity", back_populates="quotation", cascade="all, delete-orphan")
     agent_user = relationship("User")
 
 class QuotationItem(Base):
@@ -198,13 +198,13 @@ class QuotationItem(Base):
 
 class QuotationActivity(Base):
     __tablename__ = "quotation_activities"
-    id = Column(Integer, primary_key=True)
-    quotation_id = Column(UUID(as_uuid=True), ForeignKey("quotations.id"))
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    quotation_id = Column(UUID(as_uuid=True), ForeignKey("quotations.id"), nullable=False)
     name = Column(String)
     quantity = Column(Integer)
     unit_price = Column(Numeric)
     total_price = Column(Numeric)
-    quotation = relationship("Quotation", back_populates="quotation_activities") # Fix: name mismatch
+    quotation = relationship("Quotation", back_populates="activities")
 
 class SeasonalPricingRule(Base):
     __tablename__ = "seasonal_pricing_rules"
