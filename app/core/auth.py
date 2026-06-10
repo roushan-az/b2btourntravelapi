@@ -6,6 +6,7 @@ from datetime import timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,7 +21,8 @@ from app.schemas import (
 from app.services.auth_service import (
     authenticate_user, create_access_token, create_refresh_token,
     decode_token, get_current_user, hash_password, verify_password,
-    register_new_agent, send_otp_to_email, verify_otp_and_reset
+    register_new_agent, handle_forgot_password, verify_reset_otp,
+    execute_password_reset
 )
 
 # 1. DEFINE ROUTER FIRST
@@ -113,19 +115,47 @@ async def change_password(
     await db.commit()
     return MessageResponse(message="Password updated successfully")
 
-# Add these to app/core/auth.py
+# ── Pydantic Schemas to catch the React frontend JSON ─────────────────────
+class ForgotPasswordRequest(BaseModel):
+    email: str
 
-@router.post("/request-password-reset", response_model=MessageResponse)
-async def request_password_reset(payload: OTPRequest, db: AsyncSession = Depends(get_db)):
-    await send_otp_to_email(payload.email, db)
-    return MessageResponse(message="If an account exists, an OTP has been sent.")
+class VerifyOtpRequest(BaseModel):
+    email: str
+    otp: str
 
-@router.post("/reset-password", response_model=MessageResponse)
-async def reset_password(payload: ResetPasswordRequest, db: AsyncSession = Depends(get_db)):
-    success = await verify_otp_and_reset(payload.email, payload.otp, payload.new_password, db)
-    if not success:
+class ResetPasswordRequest(BaseModel):
+    reset_token: str
+    new_password: str
+    confirm_password: str
+
+# ── The Endpoints ─────────────────────────────────────────────────────────
+@router.post("/forgot-password")
+async def forgot_password(req: ForgotPasswordRequest, db: AsyncSession = Depends(get_db)):
+    await handle_forgot_password(req.email, db)
+    return {"message": "If the email is registered, an OTP has been sent."}
+
+@router.post("/verify-otp")
+async def verify_otp(req: VerifyOtpRequest, db: AsyncSession = Depends(get_db)):
+    # This matches api.js expecting {"reset_token": "ey..."}
+    token = await verify_reset_otp(req.email, req.otp, db)
+    return {"reset_token": token}
+
+@router.post("/reset-password")
+async def reset_password(req: ResetPasswordRequest, db: AsyncSession = Depends(get_db)):
+    if req.new_password != req.confirm_password:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid or expired OTP"
+            detail="Passwords do not match."
         )
-    return MessageResponse(message="Password reset successfully")
+    await execute_password_reset(req.reset_token, req.new_password, db)
+    return {"message": "Password reset successfully."}
+
+@router.get("/me")
+async def get_my_profile(current_user: User = Depends(get_current_user)):
+    return {
+        "id": str(current_user.id),
+        "email": current_user.email,
+        "full_name": current_user.full_name,
+        "role": current_user.role.value.lower(), # Ensure it matches frontend
+        "is_active": current_user.is_active
+    }

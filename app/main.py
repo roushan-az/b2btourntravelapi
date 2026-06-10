@@ -1,8 +1,3 @@
-"""
-WanderKashmir API — Main Application Entry Point
-FastAPI app with CORS, logging, health check, and all routers.
-"""
-
 import logging.config
 import os
 import sys
@@ -112,6 +107,10 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    from app.core import (
+        activities, auth, admin_stats, hotels, pricing,
+        itineraries, destinations, templates, vehicles, quotations
+    )
     # ── Middleware ─────────────────────────────────────────────────────────────
     app.add_middleware(
         CORSMiddleware,

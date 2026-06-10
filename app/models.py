@@ -1,9 +1,10 @@
 import uuid
 import enum
-from decimal import Decimal
+
 from sqlalchemy import Column, String, Boolean, ForeignKey, Integer, Enum, JSON, DateTime, func, Numeric
-from sqlalchemy.orm import relationship, declarative_base
+from sqlalchemy.orm import relationship, declarative_base, Mapped, mapped_column
 from sqlalchemy.dialects.postgresql import UUID
+from datetime import datetime
 
 Base = declarative_base()
 
@@ -215,3 +216,25 @@ class SeasonalPricingRule(Base):
     date_from = Column(String, nullable=True)
     date_to = Column(String, nullable=True)
     is_active = Column(Boolean, default=True)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Password Reset OTP Tokens
+# ══════════════════════════════════════════════════════════════════════════════
+
+class PasswordResetOTP(Base):
+    __tablename__ = "password_reset_otps"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    email: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    otp_code: Mapped[str] = mapped_column(String(8), nullable=False)
+    # Hashed OTP stored — never store plain OTP in DB
+    otp_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    is_used: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    user: Mapped["User"] = relationship("User")

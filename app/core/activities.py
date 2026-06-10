@@ -7,12 +7,12 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import settings
+
 from app.database import get_db
 from app.models import Activity, Destination, User
 from app.schemas import ActivityCreate, ActivityResponse, ActivityUpdate, MessageResponse
-from app.services.auth_service import get_current_admin, get_current_user
-from app.services.blob_service import blob_service
+from app.services.auth_service import get_current_user
+from app.services.auth_service import get_current_admin
 
 router = APIRouter(prefix="/activities", tags=["Activities"])
 
