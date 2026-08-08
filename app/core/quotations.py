@@ -206,6 +206,7 @@ async def create_quotation(
         db.add(QuotationActivity(**act.model_dump(), quotation_id=quotation.id))
 
     await db.flush()
+    await db.commit()
     await db.refresh(quotation)
 
     # PDF generation + email in background
@@ -280,6 +281,7 @@ async def update_quotation(
         setattr(q, field, value)
     db.add(q)
     await db.flush()
+    await db.commit()
     return _quotation_to_response(await _load_quotation(quotation_id, db))
 
 

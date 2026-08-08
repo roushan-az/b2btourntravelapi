@@ -16,7 +16,7 @@ from app.schemas import (
     MealPlanRateSchema, MessageResponse, RoomTypeCreate, RoomTypeResponse,
 )
 from app.services.auth_service import get_current_admin, get_current_user
-from app.services.blob_service import blob_service
+from app.services.blob_service import blob_service, logger
 
 router = APIRouter(prefix="/hotels", tags=["Hotels"])
 
@@ -93,32 +93,42 @@ async def get_hotel(
 
 @router.post("", response_model=HotelResponse, status_code=status.HTTP_201_CREATED)
 async def create_hotel(
-    payload: HotelCreate,
-    db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin),
+        payload: HotelCreate,
+        db: AsyncSession = Depends(get_db),
+        _: User = Depends(get_current_admin),
 ):
     # Validate destination
     dest_result = await db.execute(select(Destination).where(Destination.id == payload.destination_id))
     if not dest_result.scalar_one_or_none():
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Destination not found")
 
+    # Extract base hotel data
     hotel_data = payload.model_dump(exclude={"room_types", "image_url"})
     hotel = Hotel(**hotel_data)
-    if payload.image_url:
+
+    if getattr(payload, "image_url", None):
         hotel.image_url = payload.image_url
+
     db.add(hotel)
     await db.flush()
 
-    # Create room types + rates
-    for rt_data in payload.room_types:
+    # Create room types + rates if provided
+    room_types = getattr(payload, "room_types", []) or []
+    for rt_data in room_types:
         rates_data = rt_data.meal_plan_rates
-        rt = RoomType(**rt_data.model_dump(exclude={"meal_plan_rates"}), hotel_id=hotel.id)
+
+        # EXCLUDE 'hotel_id' HERE TO PREVENT MULTIPLE VALUES ERROR
+        rt_dict = rt_data.model_dump(exclude={"meal_plan_rates", "hotel_id"})
+        rt = RoomType(**rt_dict, hotel_id=hotel.id)
+
         db.add(rt)
         await db.flush()
+
         for rate in rates_data:
             db.add(MealPlanRate(**rate.model_dump(), room_type_id=rt.id))
 
     await db.flush()
+    await db.commit()  # Finalize transaction
     return _hotel_to_response(await _load_hotel(hotel.id, db))
 
 
@@ -134,21 +144,8 @@ async def update_hotel(
         setattr(hotel, field, value)
     db.add(hotel)
     await db.flush()
+    await db.commit()
     return _hotel_to_response(await _load_hotel(hotel_id, db))
-
-
-@router.delete("/{hotel_id}", response_model=MessageResponse)
-async def delete_hotel(
-    hotel_id: UUID,
-    db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin),
-):
-    hotel = await _load_hotel(hotel_id, db)
-    if hotel.image_blob_name:
-        blob_service.delete_blob(settings.AZURE_CONTAINER_HOTELS, hotel.image_blob_name)
-    await db.delete(hotel)
-    return MessageResponse(message=f"Hotel '{hotel.name}' deleted")
-
 
 @router.post("/{hotel_id}/image", response_model=HotelResponse)
 async def upload_hotel_image(
@@ -170,6 +167,7 @@ async def upload_hotel_image(
     hotel.image_url = public_url
     db.add(hotel)
     await db.flush()
+    await db.commit()
     return _hotel_to_response(await _load_hotel(hotel_id, db))
 
 
@@ -177,18 +175,25 @@ async def upload_hotel_image(
 
 @router.post("/{hotel_id}/room-types", response_model=RoomTypeResponse, status_code=status.HTTP_201_CREATED)
 async def add_room_type(
-    hotel_id: UUID,
-    payload: RoomTypeCreate,
-    db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin),
+        hotel_id: UUID,
+        payload: RoomTypeCreate,
+        db: AsyncSession = Depends(get_db),
+        _: User = Depends(get_current_admin),
 ):
     hotel = await _load_hotel(hotel_id, db)
-    rt = RoomType(**payload.model_dump(exclude={"meal_plan_rates"}), hotel_id=hotel.id)
+
+    # EXCLUDE 'hotel_id' HERE AS WELL
+    rt_dict = payload.model_dump(exclude={"meal_plan_rates", "hotel_id"})
+    rt = RoomType(**rt_dict, hotel_id=hotel.id)
+
     db.add(rt)
     await db.flush()
+
     for rate in payload.meal_plan_rates:
         db.add(MealPlanRate(**rate.model_dump(), room_type_id=rt.id))
+
     await db.flush()
+    await db.commit()
     await db.refresh(rt)
     return rt
 
@@ -219,16 +224,43 @@ async def update_meal_plan_rates(
     return MessageResponse(message="Meal plan rates updated")
 
 
-@router.delete("/{hotel_id}/room-types/{room_type_id}", response_model=MessageResponse)
-async def delete_room_type(
-    hotel_id: UUID,
-    room_type_id: UUID,
-    db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin),
+@router.delete("/{hotel_id}", response_model=MessageResponse)
+async def delete_hotel(
+        hotel_id: UUID,
+        db: AsyncSession = Depends(get_db),
+        _: User = Depends(get_current_admin),
 ):
-    result = await db.execute(select(RoomType).where(RoomType.id == room_type_id, RoomType.hotel_id == hotel_id))
-    rt = result.scalar_one_or_none()
-    if not rt:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Room type not found")
-    await db.delete(rt)
-    return MessageResponse(message=f"Room type '{rt.name}' deleted")
+    # 1. Fetch hotel directly
+    result = await db.execute(select(Hotel).where(Hotel.id == hotel_id))
+    hotel = result.scalar_one_or_none()
+
+    if not hotel:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Hotel not found")
+
+    if hotel.image_blob_name:
+        blob_service.delete_blob(settings.AZURE_CONTAINER_HOTELS, hotel.image_blob_name)
+
+    # 2. Explicitly query and delete child room types and rates
+    from app.models import RoomType, MealPlanRate, HotelSeasonalRate
+
+    rt_result = await db.execute(select(RoomType).where(RoomType.hotel_id == hotel_id))
+    room_types = rt_result.scalars().all()
+
+    for rt in room_types:
+        mpr_result = await db.execute(select(MealPlanRate).where(MealPlanRate.room_type_id == rt.id))
+        for rate in mpr_result.scalars().all():
+            await db.delete(rate)
+
+        hsr_result = await db.execute(select(HotelSeasonalRate).where(HotelSeasonalRate.room_type_id == rt.id))
+        for srate in hsr_result.scalars().all():
+            await db.delete(srate)
+
+        await db.delete(rt)
+
+    # 3. Delete the hotel record
+    await db.delete(hotel)
+
+    # 4. Force a hard commit so it never rolls back
+    await db.commit()
+
+    return MessageResponse(message=f"Hotel '{hotel.name}' deleted")

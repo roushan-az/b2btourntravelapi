@@ -69,6 +69,7 @@ async def create_activity(payload: ActivityCreate, db: AsyncSession = Depends(ge
         act.image_url = payload.image_url
     db.add(act)
     await db.flush()
+    await db.commit()
     await db.refresh(act)
     return _to_response(act)
 
@@ -83,6 +84,7 @@ async def update_activity(activity_id: UUID, payload: ActivityUpdate, db: AsyncS
         setattr(act, field, value)
     db.add(act)
     await db.flush()
+    await db.commit()
     await db.refresh(act)
     return _to_response(act)
 

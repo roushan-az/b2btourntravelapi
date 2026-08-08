@@ -82,7 +82,6 @@ async def create_destination(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_admin),
 ):
-    # Ensure slug uniqueness
     existing = await db.execute(select(Destination).where(Destination.slug == payload.slug))
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"Slug '{payload.slug}' already exists")
@@ -90,6 +89,7 @@ async def create_destination(
     dest = Destination(**payload.model_dump())
     db.add(dest)
     await db.flush()
+    await db.commit()
     await db.refresh(dest)
     return await _to_response(dest, db)
 
@@ -110,6 +110,7 @@ async def update_destination(
         setattr(dest, field, value)
     db.add(dest)
     await db.flush()
+    await db.commit()
     await db.refresh(dest)
     return await _to_response(dest, db)
 
@@ -125,7 +126,6 @@ async def delete_destination(
     if not dest:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Destination not found")
 
-    # Check for linked hotels
     hotel_check = await db.execute(select(func.count()).where(Hotel.destination_id == destination_id))
     if hotel_check.scalar_one() > 0:
         raise HTTPException(
@@ -133,6 +133,7 @@ async def delete_destination(
             detail="Cannot delete destination with linked hotels. Remove hotels first.",
         )
     await db.delete(dest)
+    await db.commit()
     return MessageResponse(message=f"Destination '{dest.name}' deleted")
 
 

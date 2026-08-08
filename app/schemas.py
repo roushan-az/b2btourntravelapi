@@ -101,38 +101,19 @@ class DestinationUpdate(BaseModel):
 
 class DestinationResponse(DestinationBase):
     id: UUID
+    hotel_count: int = 0
+    model_config = {"from_attributes": True}
 
-# --- Hotel Schemas ---
-class HotelBase(BaseModel):
-    name: str
-    destination_id: UUID
-    category: str
-    stars: int
-    description: Optional[str] = None
-    amenities: Optional[List[str]] = []
 
-class HotelCreate(HotelBase):
-    pass
-
-class HotelUpdate(BaseModel):
-    name: Optional[str] = None
-    category: Optional[str] = None
-    stars: Optional[int] = None
-    description: Optional[str] = None
-    is_active: Optional[bool] = None
-
-class HotelResponse(HotelBase):
-    id: UUID
-    rating: Optional[float] = None
-
-# --- RoomType & MealPlan Schemas ---
+# --- Move RoomType & MealPlan Schemas ABOVE Hotel Schemas ---
 
 class MealPlanRateSchema(BaseModel):
-    meal_plan: str # Using str to match Enum or string value
+    meal_plan: str
     rate_per_night: float
+    model_config = {"from_attributes": True}
 
 class RoomTypeCreate(BaseModel):
-    hotel_id: UUID
+    hotel_id: Optional[UUID] = None # Make this optional for hotel creation
     name: str
     max_occupancy: int
     extra_bed_rate: float
@@ -145,6 +126,37 @@ class RoomTypeResponse(BaseModel):
     max_occupancy: int
     extra_bed_rate: float
     meal_plan_rates: List[MealPlanRateSchema]
+    model_config = {"from_attributes": True}
+
+# --- Hotel Schemas ---
+
+class HotelBase(BaseModel):
+    name: str
+    destination_id: UUID
+    category: str
+    stars: int
+    description: Optional[str] = None
+    amenities: Optional[List[str]] = []
+    image_url: Optional[str] = None
+
+class HotelCreate(HotelBase):
+    room_types: Optional[List[RoomTypeCreate]] = [] # <--- Now Python knows what this is!
+
+class HotelUpdate(BaseModel):
+    name: Optional[str] = None
+    category: Optional[str] = None
+    stars: Optional[int] = None
+    description: Optional[str] = None
+    image_url: Optional[str] = None
+    is_active: Optional[bool] = None
+
+class HotelResponse(HotelBase):
+    id: UUID
+    rating: Optional[float] = None
+    destination_name: Optional[str] = None
+    destination_slug: Optional[str] = None
+    room_types: List[RoomTypeResponse] = []
+    model_config = {"from_attributes": True}
 
 # --- Itinerary Block Schemas ---
 

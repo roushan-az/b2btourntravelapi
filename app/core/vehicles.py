@@ -59,6 +59,7 @@ async def create_vehicle(payload: VehicleCreate, db: AsyncSession = Depends(get_
     for sr in seasonal_data:
         db.add(VehicleSeasonalRate(**sr.model_dump(), vehicle_id=vehicle.id))
     await db.flush()
+    await db.commit()
     return await _load_vehicle(vehicle.id, db)
 
 
@@ -69,6 +70,7 @@ async def update_vehicle(vehicle_id: UUID, payload: VehicleUpdate, db: AsyncSess
         setattr(vehicle, field, value)
     db.add(vehicle)
     await db.flush()
+    await db.commit()
     return await _load_vehicle(vehicle_id, db)
 
 
@@ -94,6 +96,7 @@ async def delete_vehicle(vehicle_id: UUID, db: AsyncSession = Depends(get_db), _
     if vehicle.image_url and vehicle.image_url.startswith("https://"):
         pass  # blob cleanup if needed
     await db.delete(vehicle)
+    await db.commit()
     return MessageResponse(message=f"Vehicle '{vehicle.vehicle_type}' deleted")
 
 
@@ -109,4 +112,5 @@ async def upload_vehicle_image(
     vehicle.image_url = public_url
     db.add(vehicle)
     await db.flush()
+    await db.commit()
     return await _load_vehicle(vehicle_id, db)

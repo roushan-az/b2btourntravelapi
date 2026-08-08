@@ -84,6 +84,7 @@ async def create_itinerary_block(
     block = ItineraryBlock(**data)
     db.add(block)
     await db.flush()
+    await db.commit()
     await db.refresh(block)
     return block
 
@@ -104,21 +105,25 @@ async def update_itinerary_block(
         setattr(block, field, value)
     db.add(block)
     await db.flush()
+    await db.commit()
     await db.refresh(block)
     return block
 
 
 @router.delete("/{block_id}", response_model=MessageResponse)
 async def delete_itinerary_block(
-    block_id: UUID,
-    db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_admin),
+        block_id: UUID,
+        db: AsyncSession = Depends(get_db),
+        _: User = Depends(get_current_admin),
 ):
     result = await db.execute(select(ItineraryBlock).where(ItineraryBlock.id == block_id))
     block = result.scalar_one_or_none()
     if not block:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Itinerary block not found")
+
     await db.delete(block)
+    await db.commit()  # <--- ADD THIS EXACT LINE
+
     return MessageResponse(message=f"Itinerary block '{block.title[:40]}' deleted")
 
 
@@ -146,5 +151,6 @@ async def upload_block_image(
     block.image_url = public_url
     db.add(block)
     await db.flush()
+    await db.commit()
     await db.refresh(block)
     return block

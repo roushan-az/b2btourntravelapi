@@ -34,6 +34,7 @@ async def upsert_seasonal_rules(
         db.add(obj)
         new_rules.append(obj)
     await db.flush()
+    await db.commit()
     return new_rules
 
 
@@ -52,5 +53,6 @@ async def update_seasonal_rule(
         setattr(obj, field, value)
     db.add(obj)
     await db.flush()
+    await db.commit()
     await db.refresh(obj)
     return obj

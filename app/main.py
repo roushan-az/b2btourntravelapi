@@ -150,9 +150,13 @@ def create_app() -> FastAPI:
     @app.exception_handler(Exception)
     async def general_exception_handler(request: Request, exc: Exception):
         logger.exception(f"Unhandled exception on {request.method} {request.url.path}")
+
+        headers = {"Access-Control-Allow-Origin": "*"}
+
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            content={"success": False, "message": "Internal server error"},
+            content={"success": False, "message": f"Internal server error: {str(exc)}"},
+            headers=headers
         )
 
     # ── Health check ───────────────────────────────────────────────────────────
