@@ -93,14 +93,6 @@ async def request_password_reset(payload: OTPRequest, db: AsyncSession = Depends
     # email_service.send_otp(user.email, "123456")
     return MessageResponse(message="OTP sent to your email")
 
-@router.post("/reset-password", response_model=MessageResponse)
-async def reset_password(payload: ResetPasswordRequest, db: AsyncSession = Depends(get_db)):
-    """Verifies OTP and updates password."""
-    # LOGIC: Verify OTP from DB
-    # user.hashed_password = hash_password(payload.new_password)
-    # db.commit()
-    return MessageResponse(message="Password reset successfully")
-
 # 6. CHANGE PASSWORD
 @router.post("/change-password", response_model=MessageResponse)
 async def change_password(
