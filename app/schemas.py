@@ -1,4 +1,5 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
+from datetime import datetime
 from typing import Optional, List, TypeVar, Generic
 from uuid import UUID
 
@@ -217,8 +218,7 @@ class PackagePriceResponse(BaseModel):
     total_price: float
     currency: str = "INR"
     breakdown: Optional[dict] = None
-
-# --- Quotation Schemas ---
+# --- Quotation/Package Pricing Schemas ---
 
 class QuotationItemSchema(BaseModel):
     description: str
@@ -227,20 +227,32 @@ class QuotationItemSchema(BaseModel):
     unit_price: float
     total_price: float
 
+# Alias matching create requirements
+QuotationItemCreate = QuotationItemSchema
+
 class QuotationActivitySchema(BaseModel):
     name: str
     quantity: int
     unit_price: float
     total_price: float
 
+# Alias matching create requirements
+QuotationActivityCreate = QuotationActivitySchema
+
 class QuotationCreate(BaseModel):
     client_name: str
-    client_email: EmailStr
-    client_phone: str
+    client_email: Optional[str] = None
+    client_phone: Optional[str] = None
     package_label: str
-    total_cost: float
-    items: List[QuotationItemSchema]
-    activities: List[QuotationActivitySchema]
+    nights: int
+    days: int
+    num_adults: int = 2
+    num_children: int = 0
+    travel_date: Optional[str] = None
+    items: list[QuotationItemCreate] = []
+    activities: list[QuotationActivityCreate] = []
+    notes: Optional[str] = None
+    full_snapshot: Optional[dict] = None
 
 # --- Quotation Response Schema ---
 
@@ -251,12 +263,24 @@ class QuotationResponse(BaseModel):
     client_email: EmailStr
     client_phone: str
     package_label: str
+    travel_date: Optional[str] = None
     total_cost: float
     status: str  # Reflects QuotationStatus
     items: List[QuotationItemSchema]
     activities: List[QuotationActivitySchema]
     created_at: str # ISO format timestamp
+    agent_name: Optional[str] = None
+    agency_name: Optional[str] = None
 
+    # Automatically converts datetime from SQLAlchemy into str for Pydantic
+    @field_validator("created_at", mode="before")
+    @classmethod
+    def serialize_datetime(cls, v):
+        if isinstance(v, datetime):
+            return v.isoformat()
+        return str(v) if v is not None else ""
+
+    model_config = {"from_attributes": True}
 # --- Quotation Update Schema ---
 
 class QuotationUpdate(BaseModel):

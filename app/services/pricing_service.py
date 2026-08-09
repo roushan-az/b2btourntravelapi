@@ -196,11 +196,14 @@ class PricingEngine:
             # Admins building packages use 0 markup
             return Decimal("0")
 
-        from app.models import MarkupType
-        if agent.markup_type == MarkupType.PERCENTAGE:
-            markup = _round(base_cost * (agent.markup_value / Decimal("100")))
+        # FIX: Safely parse the markup_type as a string instead of relying on the deleted MarkupType enum
+        markup_type_str = str(getattr(agent, 'markup_type', 'percentage')).lower()
+        markup_value = getattr(agent, 'markup_value', Decimal("0"))
+
+        if "percentage" in markup_type_str:
+            markup = _round(base_cost * (markup_value / Decimal("100")))
         else:
-            markup = _round(agent.markup_value)
+            markup = _round(markup_value)
 
         return markup
 

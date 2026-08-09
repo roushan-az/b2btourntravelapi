@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 from app.config import settings
 from app.database import check_db_connection, create_all_tables
 from app.core import (
-    activities, auth, admin_stats, hotels, pricing, itineraries, destinations, templates, vehicles, quotations,
+    activities, auth, admin_stats, hotels, pricing, itineraries, destinations, templates, vehicles, quotations, agents
 )
 from app.schemas import HealthResponse
 from app.services.blob_service import blob_service
@@ -202,6 +202,7 @@ def create_app() -> FastAPI:
     app.include_router(pricing.router, prefix=API_PREFIX)
     app.include_router(templates.router, prefix=API_PREFIX)
     app.include_router(admin_stats.router, prefix=API_PREFIX)
+    app.include_router(agents.router, prefix="/api/v1")
 
     logger.info(f"Registered {len(app.routes)} routes")
     return app

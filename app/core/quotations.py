@@ -14,6 +14,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, R
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from sqlalchemy.future import select
 
 from app.config import settings
 from app.database import get_db
@@ -61,13 +62,13 @@ async def _load_quotation(quotation_id: UUID, db: AsyncSession) -> Quotation:
 
 
 def _quotation_to_response(q: Quotation) -> QuotationResponse:
-    data = QuotationResponse.model_validate(q)
+    # Convert SQLAlchemy object to dictionary or ensure from_attributes works cleanly
+    data = QuotationResponse.model_validate(q, from_attributes=True)
     if q.agent_user:
         data.agent_name = q.agent_user.full_name
         if q.agent_user.agent_profile:
             data.agency_name = q.agent_user.agent_profile.agency_name
     return data
-
 
 def _check_access(quotation: Quotation, user: User) -> None:
     """Agents can only see their own quotations; admins see all."""
@@ -181,11 +182,7 @@ async def create_quotation(
         client_email=payload.client_email,
         client_phone=payload.client_phone,
         package_label=payload.package_label,
-        nights=payload.nights,
-        days=payload.days,
-        num_adults=payload.num_adults,
-        num_children=payload.num_children,
-        travel_date=payload.travel_date,
+        travel_date=payload.travel_date,  # <--- Saved directly into the database column
         base_cost=base_cost,
         markup_amount=markup_amount,
         gst_amount=gst_amount,
@@ -196,6 +193,7 @@ async def create_quotation(
         notes=payload.notes,
         full_snapshot=payload.full_snapshot,
     )
+
     db.add(quotation)
     await db.flush()
 
@@ -362,3 +360,28 @@ async def quotation_stats(
         "confirmed_quotations": confirmed.scalar_one(),
         "total_revenue": float(total_revenue.scalar_one() or 0),
     }
+
+# Add this to your existing quotations router
+@router.delete("/{quotation_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_quotation(
+        quotation_id: UUID,
+        db: AsyncSession = Depends(get_db),
+        current_user: User = Depends(get_current_user)
+):
+    # 1. Fetch the quotation
+    result = await db.execute(select(Quotation).where(Quotation.id == quotation_id))
+    quotation = result.scalar_one_or_none()
+
+    # 2. Check if it exists
+    if not quotation:
+        raise HTTPException(status_code=404, detail="Quotation not found")
+
+    # 3. Ensure the current agent owns it (or is an Admin)
+    if quotation.agent_user_id != current_user.id and current_user.role.value != "SUPER_ADMIN":
+        raise HTTPException(status_code=403, detail="Not authorized to delete this quotation")
+
+    # 4. Delete and commit
+    await db.delete(quotation)
+    await db.commit()
+
+    return None
